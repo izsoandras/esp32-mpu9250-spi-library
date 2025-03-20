@@ -7,5 +7,8 @@
     ],
     "idf.portWin": "COM6",
     "idf.toolsPathWin": "d:\\Users\\Tarsoly\\Programming\\esp32\\esp-iidf_tools",
-    "idf.flashType": "UART"
+    "idf.flashType": "UART",
+    "files.associations": {
+        "*.tcc": "c"
+    }
 }
