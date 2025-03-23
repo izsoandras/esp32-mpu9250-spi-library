@@ -44,71 +44,103 @@ esp_err_t mpu9250_register_device(MPU9250_spi_device_t* dev, spi_host_device_t s
 /**
  * Read a single byte from the given register of the given device.
  * 
+ * Copies the value of the register on the given address to the given destination.
+ * 
  * @param dev Pointer to the MPU9250_spi_device_t to read from
  * @param reg The register address which is read
- * 
- * @return Value read from the register
+ * @param dest Output destination
+  * 
+  * @return ESP error code
  */
-static uint8_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg){
+static esp_err_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* dest){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = 8,
         .flags = SPI_TRANS_USE_RXDATA,
     };
 
-    ESP_ERROR_CHECK(spi_device_polling_transmit(dev->dev_handle, &spi_tran));
+    esp_err_t err = spi_device_polling_transmit(dev->dev_handle, &spi_tran);
 
-    return spi_tran.rx_data[0];
+    *dest = spi_tran.rx_data[0];
+    return err;
 }
  /**
   * Read a 16 bit unsigned integer from the given device, starting from the given register.
   * 
+  * Copies the value of 2 register, starting from the given address, 
+  * interpreted as a 16 bit unsigned integer to the given destination.
+  * 
   * @param dev Pointer to the MPU9250_spi_device_t to read from
   * @param reg The start register address of the reading
+  * @param dest Output destination
   * 
-  * @return The value of the registers interpreted as one 16 bit unsigned integer
+  * @return ESP error code
   */
-static uint16_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg){
+static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint16_t* dest){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = 16,
         .flags = SPI_TRANS_USE_RXDATA,
     };
 
-    ESP_ERROR_CHECK(spi_device_polling_transmit(dev->dev_handle, &spi_tran));
-    return (((uint16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
+    esp_err_t err = spi_device_polling_transmit(dev->dev_handle, &spi_tran);
+    *dest =  (((uint16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
+    return err;
 }
 
  /**
   * Read a 16 bit signed integer value from the given device, starting from the given register.
   * 
+  * Copies the value of 2 register, starting from the given address, 
+  * interpreted as a 16 bit signed integer to the given destination.
+  * 
   * @param dev Pointer to the MPU9250_spi_device_t to read from
   * @param reg The start register address of the reading
+  * @param dest Output destination
   * 
-  * @return The value of the registers interpreted as one 16 bit signed integer
+  * @return ESP error code
   */
- static int16_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg){
+ static esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = 16,
         .flags = SPI_TRANS_USE_RXDATA,
     };
 
-    ESP_ERROR_CHECK(spi_device_polling_transmit(dev->dev_handle, &spi_tran));
-    return (((int16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
+    esp_err_t err = spi_device_polling_transmit(dev->dev_handle, &spi_tran);
+    *dest = (((int16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
+    return err;
 }
 
 /**
- * Read the 'Who am I?' register of the given device
+ * Read the 'Who am I?' register (117) of the given device
+ * 
+ * Reads the 'Who am I?' value from register 117 and copies the result
+ * to @see out.
  * 
  * @param dev Pointer to the MPU9250_spi_device_t to read from
- * @return WHOAMI value
+ * @param out Output destination
+ * 
+ * @return ESP error code
  */
-uint8_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev){
-    return read_byte(dev, MPU9250_REG_WHOAMI);
+esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out){
+    return read_byte(dev, MPU9250_REG_WHOAMI, out);
 }
 
-float mpu9250_read_temp(const MPU9250_spi_device_t* dev){
-    int16_t raw_temp = read_int16(dev, MPU9250_REG_TEMP);
-    return (raw_temp - dev->room_temp_offset) / dev->temp_sensitivity + 21;
+/**
+ * Read the tempearture registers (65, 66) of the given device
+ * 
+ * Reads the temperature measurement from registers 65-66 and
+ * copies the result to @see out in °C.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param out Output destination
+ * 
+ * @return 
+ */
+esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out){
+    int16_t raw_temp;
+    esp_err_t err = read_int16(dev, MPU9250_REG_TEMP, &raw_temp);
+    *out = (raw_temp - dev->room_temp_offset) / dev->temp_sensitivity + 21;
+    return err;
 }
