@@ -1,7 +1,33 @@
 #include "mpu9250_spi.h"
 #include <string.h>
 
+/**
+ * Sensitivity for different gyroscope fullscale setting [LSB/(°/s)]
+ * = 2^16/FS
+ */
 const float MPU9250_GYRO_SENS[4] = {131.072, 65.536, 32.768, 16.384};
+
+/**
+ * Sensitivity for different accelerometer fullscale setting [LSB/g]
+ * = 2^16/FS
+ */
+const float MPU9250_ACC_SENS[4] = {16384, 8192, 4096, 2048};
+
+/**
+ * Initialize an MPU9250_config_t with default values
+ * 
+ * @return Default configuration set for the sensor
+ */
+MPU9250_config_t MPU9250_get_default_config(){
+    MPU9250_config_t ret = {
+        .room_temp_offset = 0,
+        .temp_sensitivity = 333.87,
+        .gyro_fs = MPU9250_GYRO_FS_250,
+        .acc_fs = MPU9250_ACC_FS_2G,
+        .g = 9.8067,
+    };
+    return ret;
+}
 
 /**
  * Initialize a MPU9250_spi_device_t structure.a64l
@@ -15,11 +41,7 @@ MPU9250_spi_device_t mpu9250_create_device(int cs_pin){
     // Create device configuration struct
     MPU9250_spi_device_t ret = {
         .cs_pin = cs_pin,
-        .config = {
-            .room_temp_offset = 0,
-            .temp_sensitivity = 333.87,
-            .gyro_fs = MPU9250_GYRO_FS_250,
-        },
+        .config = MPU9250_get_default_config()
     };
 
     return ret;
@@ -177,7 +199,7 @@ esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out){
 /**
  * Read the latest gyroscope measurements (67-72) of the given device
  * 
- * Reads the latest gyrscope measurement from registers 67-72 and
+ * Reads the latest gyroscope measurement from registers 67-72 and
  * copies the result to @see out in deg/s.
  * 
  * @param dev Pointer to the MPU9250_spi_device_t to read from
@@ -192,5 +214,26 @@ esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out){
     out->x = (int16_t)(gyro_data[0]<<8 | gyro_data[1]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
     out->y = (int16_t)(gyro_data[2]<<8 | gyro_data[3]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
     out->z = (int16_t)(gyro_data[4]<<8 | gyro_data[5]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
+    return err;
+}
+
+/**
+ * Read the latest accelerometer measurements (59-64) of the given device
+ * 
+ * Reads the latest accelerometer measurement from registers 59-64 and
+ * copies the result to @see out in m/s^2.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param out Output destination
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
+    uint8_t acc_data[6];
+    esp_err_t err = read_n_bytes(dev, MPU9250_REG_ACC_X, acc_data, 6);
+    
+    out->x = (int16_t)(acc_data[0]<<8 | acc_data[1]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
+    out->y = (int16_t)(acc_data[2]<<8 | acc_data[3]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
+    out->z = (int16_t)(acc_data[4]<<8 | acc_data[5]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
     return err;
 }
