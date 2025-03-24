@@ -1,4 +1,7 @@
 #include "mpu9250_spi.h"
+#include <string.h>
+
+const float MPU9250_GYRO_SENS[4] = {131.072, 65.536, 32.768, 16.384};
 
 /**
  * Initialize a MPU9250_spi_device_t structure.a64l
@@ -12,8 +15,11 @@ MPU9250_spi_device_t mpu9250_create_device(int cs_pin){
     // Create device configuration struct
     MPU9250_spi_device_t ret = {
         .cs_pin = cs_pin,
-        .room_temp_offset = 0,
-        .temp_sensitivity = 333.87,
+        .config = {
+            .room_temp_offset = 0,
+            .temp_sensitivity = 333.87,
+            .gyro_fs = MPU9250_GYRO_FS_250,
+        },
     };
 
     return ret;
@@ -100,7 +106,7 @@ static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t
   * 
   * @return ESP error code
   */
- static esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest){
+ esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = 16,
@@ -110,6 +116,29 @@ static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t
     esp_err_t err = spi_device_polling_transmit(dev->dev_handle, &spi_tran);
     *dest = (((int16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
     return err;
+}
+
+/**
+ * Read the given number of bytes to the pointed destination starting from the given register of the given device.a64l
+ * 
+ * Copyes @see n number of bytes, starting from the register @see reg
+ * to the memory location starting at @see out. No checking is done,
+ * the plain representation is copied. interpreting it is up to the calling location.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param reg The start register address of the reading
+ * @param dest Output destination
+ * 
+ * @return ESP error code
+ */
+static esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, void* dest, size_t n){
+    spi_transaction_t spi_tran = {
+        .addr = reg | 0b10000000,
+        .length = n*8,
+        .rx_buffer = dest,
+    };
+
+    return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
 }
 
 /**
@@ -136,11 +165,32 @@ esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out){
  * @param dev Pointer to the MPU9250_spi_device_t to read from
  * @param out Output destination
  * 
- * @return 
+ * @return ESP error code
  */
 esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out){
     int16_t raw_temp;
     esp_err_t err = read_int16(dev, MPU9250_REG_TEMP, &raw_temp);
-    *out = (raw_temp - dev->room_temp_offset) / dev->temp_sensitivity + 21;
+    *out = (raw_temp - dev->config.room_temp_offset) / dev->config.temp_sensitivity + 21;
+    return err;
+}
+
+/**
+ * Read the latest gyroscope measurements (67-72) of the given device
+ * 
+ * Reads the latest gyrscope measurement from registers 67-72 and
+ * copies the result to @see out in deg/s.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param out Output destination
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out){
+    uint8_t gyro_data[6];
+    esp_err_t err = read_n_bytes(dev, MPU9250_REG_GYRO_X, gyro_data, 6);
+    
+    out->x = (int16_t)(gyro_data[0]<<8 | gyro_data[1]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
+    out->y = (int16_t)(gyro_data[2]<<8 | gyro_data[3]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
+    out->z = (int16_t)(gyro_data[4]<<8 | gyro_data[5]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
     return err;
 }
