@@ -34,6 +34,12 @@ typedef enum {
     MPU9250_ACC_FS_16G = 0b11,
 } MPU9250_acc_fs_t;
 
+typedef enum {
+    MPU9250_GYRO_DLPF_DIS = 0b00,
+    MPU9250_GYRO_DLPF_DIS2 = 0b01,
+    MPU9250_GYRO_DLPF_EN = 0b11,
+} MPU9250_gyro_fchoice_t;
+
 extern const float MPU9250_GYRO_SENS[4];
 
 extern const float MPU9250_ACC_SENS[4];
@@ -43,6 +49,7 @@ typedef struct {
     double room_temp_offset;
     MPU9250_gyro_fs_t gyro_fs;
     MPU9250_acc_fs_t acc_fs;
+    MPU9250_gyro_fchoice_t gyro_fchoice;
     float g;
 } MPU9250_config_t;
 
@@ -65,5 +72,11 @@ esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out);
 esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out);
 
 esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out);
+
+esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest);
+
+esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, void* dest, size_t n);
+
+esp_err_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* dest);
 
 #endif

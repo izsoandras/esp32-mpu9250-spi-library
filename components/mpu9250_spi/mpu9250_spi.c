@@ -24,6 +24,7 @@ MPU9250_config_t MPU9250_get_default_config(){
         .temp_sensitivity = 333.87,
         .gyro_fs = MPU9250_GYRO_FS_250,
         .acc_fs = MPU9250_ACC_FS_2G,
+        .gyro_fchoice = MPU9250_GYRO_DLPF_EN,
         .g = 9.8067,
     };
     return ret;
@@ -80,7 +81,7 @@ esp_err_t mpu9250_register_device(MPU9250_spi_device_t* dev, spi_host_device_t s
   * 
   * @return ESP error code
  */
-static esp_err_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* dest){
+esp_err_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* dest){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = 8,
@@ -150,14 +151,35 @@ static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t
  * @param dev Pointer to the MPU9250_spi_device_t to read from
  * @param reg The start register address of the reading
  * @param dest Output destination
+ * @param n Number of bytes to read
  * 
  * @return ESP error code
  */
-static esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, void* dest, size_t n){
+esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, void* dest, size_t n){
     spi_transaction_t spi_tran = {
         .addr = reg | 0b10000000,
         .length = n*8,
         .rx_buffer = dest,
+    };
+
+    return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
+}
+
+/**
+ * Send the bytes from @see buff consecutively starting at the address given in @see reg.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param reg The start register address of the writing
+ * @param buff Bytes to be sent
+ * @param n Number of bytes to send
+ * 
+ * @return ESP error code
+ */
+esp_err_t write_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* buff, size_t n){
+    spi_transaction_t spi_tran = {
+        .addr = reg & 0b10000000,
+        .length = n*8,
+        .rx_buffer = buff,
     };
 
     return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
@@ -237,3 +259,15 @@ esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
     out->z = (int16_t)(acc_data[4]<<8 | acc_data[5]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
     return err;
 }
+
+esp_err_t mpu9250_set_gyro_fs(const MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_fs){
+    uint8_t byte = (gyro_fs << 3) | ~dev->config.gyro_fchoice;
+
+}
+
+/**
+ * Set the gyroscope offset values
+ */
+// esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, uint16_t* offs_xyz){
+//     uint8_t bytes[6];
+// }
