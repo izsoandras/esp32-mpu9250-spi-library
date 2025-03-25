@@ -61,7 +61,7 @@ esp_err_t mpu9250_register_device(MPU9250_spi_device_t* dev, spi_host_device_t s
     spi_device_interface_config_t devcfg = {
         .mode = 0, // SPI mode 0, alapértelmezetten 0 az órajel értéke, és felfutó élre történik mintavételezés
         .address_bits = 8,
-        .clock_speed_hz = 250000, // 0,25 MHz, maximum 1 MHz lehet
+        .clock_speed_hz = 1000000, // 0,25 MHz, maximum 1 MHz lehet
         .spics_io_num = dev->cs_pin,       // CS Pin
         .queue_size = 1,
     };
