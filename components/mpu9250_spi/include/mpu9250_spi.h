@@ -11,6 +11,7 @@ typedef struct {
 
 typedef enum {
     MPU9250_REG_GYRO_CONF = 27,
+    MPU9250_REG_ACC_CONF = 28,
     MPU9250_REG_ACC_X = 59,
     MPU9250_REG_ACC_Y = 61,
     MPU9250_REG_ACC_Z = 63,
@@ -75,6 +76,8 @@ esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out);
 esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out);
 
 esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_fs);
+
+esp_err_t mpu9250_set_acc_fs(MPU9250_spi_device_t* dev, MPU9250_acc_fs_t acc_fs);
 
 esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest);
 

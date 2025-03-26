@@ -281,13 +281,13 @@ esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
 }
 
 /**
- * Set gyroscope full scale. Sends the update to the sensor immediately.a64l
+ * Set gyroscope full scale. Sends the update to the sensor immediately.
  * 
  * Changes the gyroscope fullscale setting. IMPORTANT: since the register contains
  * other options aswell, the MPU9250_spi_device_t structure is used to fill the data!
  * Pay attention to keep it consistent! (Values should only be change through functions)
  * 
- * @param dev Pointer to the MPU9250_spi_device_t whose full scale is to be shifted
+ * @param dev Pointer to the MPU9250_spi_device_t whose gyroscope full scale is to be shifted
  * @param gyro_fs New full scale CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_SIZE
  * 
  * @return ESP error code
@@ -296,6 +296,24 @@ esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_
     uint8_t byte = ((uint8_t)gyro_fs << 3) | (dev->config.gyro_fchoice ^ 0b11);
     dev->config.gyro_fs = gyro_fs;
     return write_byte(dev, MPU9250_REG_GYRO_CONF, byte);
+}
+
+/**
+ * Set accelerometer full scale. Sends the update to the sensor immediately.
+ * 
+ * Changes the accelerometer fullscale setting. IMPORTANT: since the register contains
+ * other options aswell, the MPU9250_spi_device_t structure is used to fill the data!
+ * Pay attention to keep it consistent! (Values should only be change through functions)
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose accelerometer full scale is to be shifted
+ * @param gyro_fs New full scale CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_SIZE
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_set_acc_fs(MPU9250_spi_device_t* dev, MPU9250_acc_fs_t acc_fs){
+    uint8_t byte = ((uint8_t)acc_fs << 3);
+    dev->config.acc_fs = acc_fs;
+    return write_byte(dev, MPU9250_REG_ACC_CONF, byte);
 }
 
 /**
