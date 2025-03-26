@@ -166,9 +166,29 @@ esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, 
 }
 
 /**
+ * Send one byte to the sensor
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to write
+ * @param reg The register address to write
+ * @param data Byte to write
+ * 
+ * @return ESP error code
+ */
+esp_err_t write_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t data){
+    spi_transaction_t spi_tran = {
+        .addr = reg & 0b01111111,
+        .length = 8,
+        .tx_data[0] = data,
+        .flags = SPI_TRANS_USE_TXDATA,
+    };
+
+    return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
+}
+
+/**
  * Send the bytes from @see buff consecutively starting at the address given in @see reg.
  * 
- * @param dev Pointer to the MPU9250_spi_device_t to read from
+ * @param dev Pointer to the MPU9250_spi_device_t to write to
  * @param reg The start register address of the writing
  * @param buff Bytes to be sent
  * @param n Number of bytes to send
@@ -177,9 +197,9 @@ esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, 
  */
 esp_err_t write_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* buff, size_t n){
     spi_transaction_t spi_tran = {
-        .addr = reg & 0b10000000,
+        .addr = reg & 0b01111111,
         .length = n*8,
-        .rx_buffer = buff,
+        .tx_buffer = buff,
     };
 
     return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
@@ -260,9 +280,22 @@ esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
     return err;
 }
 
-esp_err_t mpu9250_set_gyro_fs(const MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_fs){
-    uint8_t byte = (gyro_fs << 3) | ~dev->config.gyro_fchoice;
-
+/**
+ * Set gyroscope full scale. Sends the update to the sensor immediately.a64l
+ * 
+ * Changes the gyroscope fullscale setting. IMPORTANT: since the register contains
+ * other options aswell, the MPU9250_spi_device_t structure is used to fill the data!
+ * Pay attention to keep it consistent! (Values should only be change through functions)
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose full scale is to be shifted
+ * @param gyro_fs New full scale CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_SIZE
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_fs){
+    uint8_t byte = ((uint8_t)gyro_fs << 3) | (dev->config.gyro_fchoice ^ 0b11);
+    dev->config.gyro_fs = gyro_fs;
+    return write_byte(dev, MPU9250_REG_GYRO_CONF, byte);
 }
 
 /**
