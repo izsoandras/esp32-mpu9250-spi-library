@@ -318,7 +318,28 @@ esp_err_t mpu9250_set_acc_fs(MPU9250_spi_device_t* dev, MPU9250_acc_fs_t acc_fs)
 
 /**
  * Set the gyroscope offset values
+ * 
+ * Sets the gyroscope offset according to the given values in °/s.
+ * The offset is automatically scaled by the sensor according to 
+ * the full scale setting.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose gyroscope offset is to be changed
+ * @param x_offs Offset for the X axis [°/s]
+ * @param y_offs Offset for the Y axis [°/s]
+ * @param z_offs Offset for the Z axis [°/s]
+ * 
+ * @return ESP error code
  */
-// esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, uint16_t* offs_xyz){
-//     uint8_t bytes[6];
-// }
+esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs){
+    float offs[] = {x_offs, y_offs, z_offs};
+    uint8_t bytes[6];
+
+    int16_t offs_temp;
+    for(uint8_t i = 0; i < 3; i++){
+        offs_temp = offs[i] * MPU9250_GYRO_SENS[0] / 4; // formula from the register map document reduces to this
+        bytes[2*i] = (offs_temp >> 8) & 0xFF;
+        bytes[2*i+1] = offs_temp & 0xFF;
+    }
+
+    return write_n_bytes(dev, MPU9250_REG_GYRO_OFFS_X, bytes, 6);
+}
