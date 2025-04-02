@@ -26,6 +26,9 @@ MPU9250_config_t MPU9250_get_default_config(){
         .acc_fs = MPU9250_ACC_FS_2G,
         .gyro_fchoice = MPU9250_GYRO_DLPF_EN,
         .g = 9.8067,
+        .acc_default_x_offs = 0, //-3176,
+        .acc_default_y_offs = 0, //-6996,
+        .acc_default_z_offs = 0, //10774,
     };
     return ret;
 }
@@ -342,4 +345,65 @@ esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, float x_offs, f
     }
 
     return write_n_bytes(dev, MPU9250_REG_GYRO_OFFS_X, bytes, 6);
+}
+
+/**
+ * Overwrites the default accelerometer offset values.
+ * 
+ * Reads the current accelerometer offset values from the sensor and updates the
+ * stored values. This is necessary for @see mpu9250_set_acc_offs to function properly.
+ * Issue this command once after reset, before changing the offset values!
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose accelerometer offset is to be read
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_update_default_acc_offs(MPU9250_spi_device_t* dev){
+    esp_err_t ret;
+    int16_t offsets[3];
+
+    for(uint8_t i = 0; i < 3; i++){
+        ret = read_int16(dev, MPU9250_REG_ACC_OFFS_X+i*3, offsets+i); // register is stepped every 3 because there is 1 register between offset registers
+        if(ret != ESP_OK)
+            return ret;
+    }
+
+    dev->config.acc_default_x_offs = offsets[0];
+    dev->config.acc_default_y_offs = offsets[1];
+    dev->config.acc_default_z_offs = offsets[2];
+
+    return ESP_OK;
+}
+
+/**
+ * Set the accelerometer offset values
+ * 
+ * Sets the accelerometer offset according ot the given values in m/s^2.
+ * The offset is automatically scaled by the sensor according to the full scale setting.
+ * IMPORTANT! The offset registers contain facoty values by default, and the offset has to be
+ * set relative to those! Don't forget to update those values according to your sensor!
+ * This can be done either by hand or the @see mpu9250_update_default_acc_offs function after reset.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose accelerometer offset is to be changed
+ * @param x_offs Offset for the X axis [m/s^2]
+ * @param y_offs Offset for the Y axis [m/s^2]
+ * @param z_offs Offset for the Z axis [m/s^2]
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs){
+    float offs[] = {x_offs, y_offs, z_offs};
+    int16_t def_offs[] = {dev->config.acc_default_x_offs, dev->config.acc_default_y_offs, dev->config.acc_default_z_offs};
+    uint8_t bytes[8];   // Memory addresses are not continously spaced
+    bytes[2] = 0;
+    bytes[5] = 0;
+
+    int16_t offs_temp;
+    for(uint8_t i = 0; i < 3; i++){
+        offs_temp = def_offs[i] + offs[i] / dev->config.g * 2048; // available offset is +/-16g on each full scale setting, *2 because the 0th bit is reserved and [1:15] bits are used -> (2^15-1)/32 * 2
+        bytes[3*i] = (offs_temp >> 8) & 0xFF;
+        bytes[3*i+1] = offs_temp & 0xFE;
+    }
+
+    return write_n_bytes(dev, MPU9250_REG_ACC_OFFS_X, bytes, 8);
 }

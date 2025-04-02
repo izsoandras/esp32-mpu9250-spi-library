@@ -23,6 +23,9 @@ typedef enum {
     MPU9250_REG_GYRO_Y = 69,
     MPU9250_REG_GYRO_Z = 71,
     MPU9250_REG_WHOAMI = 117,
+    MPU9250_REG_ACC_OFFS_X = 119,
+    MPU9250_REG_ACC_OFFS_Y = 122,
+    MPU9250_REG_ACC_OFFS_Z = 125,
 } MPU9250_register_t;
 
 typedef enum {
@@ -55,6 +58,9 @@ typedef struct {
     MPU9250_gyro_fs_t gyro_fs;
     MPU9250_acc_fs_t acc_fs;
     MPU9250_gyro_fchoice_t gyro_fchoice;
+    int16_t acc_default_x_offs;
+    int16_t acc_default_y_offs;
+    int16_t acc_default_z_offs;
     float g;
 } MPU9250_config_t;
 
@@ -83,6 +89,10 @@ esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_
 esp_err_t mpu9250_set_acc_fs(MPU9250_spi_device_t* dev, MPU9250_acc_fs_t acc_fs);
 
 esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs);
+
+esp_err_t mpu9250_update_default_acc_offs(MPU9250_spi_device_t* dev);
+
+esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs);
 
 esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest);
 
