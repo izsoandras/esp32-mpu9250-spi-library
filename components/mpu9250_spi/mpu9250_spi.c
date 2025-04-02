@@ -209,6 +209,21 @@ esp_err_t write_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg,
 }
 
 /**
+ * Issues reset for the sensor
+ * 
+ * Reset command is sent by writing the value in the register.
+ * The completion of the reset is not waited for. The sensor clears the
+ * same bit when reset is done.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to reset
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_reset(const MPU9250_spi_device_t* dev){
+    return write_byte(dev, MPU9250_REG_PWR_MGMT_1, 0b10000000);
+}
+
+/**
  * Read the 'Who am I?' register (117) of the given device
  * 
  * Reads the 'Who am I?' value from register 117 and copies the result

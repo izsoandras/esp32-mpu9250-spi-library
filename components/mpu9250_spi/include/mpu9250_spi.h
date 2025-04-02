@@ -22,6 +22,7 @@ typedef enum {
     MPU9250_REG_GYRO_X = 67,
     MPU9250_REG_GYRO_Y = 69,
     MPU9250_REG_GYRO_Z = 71,
+    MPU9250_REG_PWR_MGMT_1 = 107,
     MPU9250_REG_WHOAMI = 117,
     MPU9250_REG_ACC_OFFS_X = 119,
     MPU9250_REG_ACC_OFFS_Y = 122,
@@ -75,6 +76,8 @@ MPU9250_config_t MPU9250_get_default_config();
 MPU9250_spi_device_t mpu9250_create_device(int cs_pin);
 
 esp_err_t mpu9250_register_device(MPU9250_spi_device_t* dev, spi_host_device_t spi_host);
+
+esp_err_t mpu9250_reset(const MPU9250_spi_device_t* dev);
 
 esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out);
 
