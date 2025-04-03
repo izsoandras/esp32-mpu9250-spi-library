@@ -62,16 +62,16 @@ typedef enum {
 } MPU9250_gyro_dlpf_cfg_t;
 
 typedef enum {
-    MPU9250_GYRO_DLPF_8800Hz_32kHz,
-    MPU9250_GYRO_DLPF_3600Hz_32kHz,
-    MPU9250_GYRO_DLPF_3600Hz_8kHz,
-    MPU9250_GYRO_DLPF_250Hz_8kHz,
-    MPU9250_GYRO_DLPF_184Hz_1kHz,
-    MPU9250_GYRO_DLPF_92Hz_1kHz,
-    MPU9250_GYRO_DLPF_41Hz_1kHz,
-    MPU9250_GYRO_DLPF_20Hz_1kHz,
-    MPU9250_GYRO_DLPF_10Hz_1kHz,
-    MPU9250_GYRO_DLPF_5Hz_1kHz,
+    MPU9250_GYRO_DLPF_250Hz_8kHz = 0,
+    MPU9250_GYRO_DLPF_184Hz_1kHz = 1,
+    MPU9250_GYRO_DLPF_92Hz_1kHz = 2,
+    MPU9250_GYRO_DLPF_41Hz_1kHz = 3,
+    MPU9250_GYRO_DLPF_20Hz_1kHz = 4,
+    MPU9250_GYRO_DLPF_10Hz_1kHz = 5,
+    MPU9250_GYRO_DLPF_5Hz_1kHz = 6,
+    MPU9250_GYRO_DLPF_3600Hz_8kHz = 7,
+    MPU9250_GYRO_DLPF_8800Hz_32kHz = 8,
+    MPU9250_GYRO_DLPF_3600Hz_32kHz = 9,
 } MPU9250_gyro_dlpf_bw_fs_t;
 
 typedef enum {
@@ -136,6 +136,8 @@ esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_
 esp_err_t mpu9250_set_acc_fs(MPU9250_spi_device_t* dev, MPU9250_acc_fs_t acc_fs);
 
 esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs);
+
+esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_fs_t dlpf_setting);
 
 esp_err_t mpu9250_update_default_acc_offs(MPU9250_spi_device_t* dev);
 

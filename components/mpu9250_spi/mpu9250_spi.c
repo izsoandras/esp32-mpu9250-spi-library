@@ -225,8 +225,15 @@ esp_err_t write_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg,
     spi_transaction_t spi_tran = {
         .addr = reg & 0b01111111,
         .length = n*8,
-        .tx_buffer = buff,
     };
+    if(n <= 4){
+        for(uint8_t i = 0; i < n; i++)
+            spi_tran.tx_data[i] = buff[i];
+            
+        spi_tran.flags = SPI_TRANS_USE_TXDATA;
+    }else{
+        spi_tran.tx_buffer = buff;
+    }
 
     return spi_device_polling_transmit(dev->dev_handle, &spi_tran);
 }
@@ -444,4 +451,39 @@ esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, fl
     }
 
     return write_n_bytes(dev, MPU9250_REG_ACC_OFFS_X, bytes, 8);
+}
+
+/**
+ * @brief Change the DLPF setting for the gyroscope
+ * 
+ * Sets the FCHOICE_B and DLPF_CFG values of the sensor,
+ * based on the required digital low pass filter setting.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param dlpf_setting The cutoff-frequnecy/sample rate setting to set
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_fs_t dlpf_setting){
+    switch(dlpf_setting){
+        case MPU9250_GYRO_DLPF_8800Hz_32kHz:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_0;
+            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
+            break;
+        case MPU9250_GYRO_DLPF_3600Hz_32kHz:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_1;
+            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
+            break;
+        default:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_2;
+            dev->config.gyro_dlpf_cfg = dlpf_setting;
+            break;
+    }
+
+    uint8_t bytes[2] = {
+        build_config_reg(dev),
+        build_gyro_config_reg(dev)
+    };
+
+    return write_n_bytes(dev, MPU9250_REG_CONF, bytes, 2);
 }
