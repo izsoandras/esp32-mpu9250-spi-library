@@ -13,6 +13,7 @@ typedef enum {
     MPU9250_REG_GYRO_OFFS_X = 19,
     MPU9250_REG_GYRO_OFFS_Y = 21,
     MPU9250_REG_GYRO_OFFS_Z = 23,
+    MPU9250_REG_CONF = 26,
     MPU9250_REG_GYRO_CONF = 27,
     MPU9250_REG_ACC_CONF = 28,
     MPU9250_REG_ACC_X = 59,
@@ -44,25 +45,68 @@ typedef enum {
 } MPU9250_acc_fs_t;
 
 typedef enum {
-    MPU9250_GYRO_DLPF_DIS = 0b00,
-    MPU9250_GYRO_DLPF_DIS2 = 0b01,
-    MPU9250_GYRO_DLPF_EN = 0b11,
+    MPU9250_GYRO_FCHOICE_0 = 0b00,
+    MPU9250_GYRO_FCHOICE_1 = 0b01,
+    MPU9250_GYRO_FCHOICE_2 = 0b11,
 } MPU9250_gyro_fchoice_t;
+
+typedef enum {
+    MPU9250_GYRO_DLPF_CFG_0 = 0,
+    MPU9250_GYRO_DLPF_CFG_1 = 1,
+    MPU9250_GYRO_DLPF_CFG_2 = 2,
+    MPU9250_GYRO_DLPF_CFG_3 = 3,
+    MPU9250_GYRO_DLPF_CFG_4 = 4,
+    MPU9250_GYRO_DLPF_CFG_5 = 5,
+    MPU9250_GYRO_DLPF_CFG_6 = 6,
+    MPU9250_GYRO_DLPF_CFG_7 = 7,
+} MPU9250_gyro_dlpf_cfg_t;
+
+typedef enum {
+    MPU9250_GYRO_DLPF_8800Hz_32kHz,
+    MPU9250_GYRO_DLPF_3600Hz_32kHz,
+    MPU9250_GYRO_DLPF_3600Hz_8kHz,
+    MPU9250_GYRO_DLPF_250Hz_8kHz,
+    MPU9250_GYRO_DLPF_184Hz_1kHz,
+    MPU9250_GYRO_DLPF_92Hz_1kHz,
+    MPU9250_GYRO_DLPF_41Hz_1kHz,
+    MPU9250_GYRO_DLPF_20Hz_1kHz,
+    MPU9250_GYRO_DLPF_10Hz_1kHz,
+    MPU9250_GYRO_DLPF_5Hz_1kHz,
+} MPU9250_gyro_dlpf_bw_fs_t;
+
+typedef enum {
+    MPU9250_FIFO_REPLACE = 0b00000000,
+    MPU9250_FIFO_STOPWRITE = 0b01000000,
+} MPU9250_fifo_mode_t;
+
+typedef enum {
+    MPU9250_FSYNC_DIS    = 0b00000000,
+    MPU9250_FSYNC_TEMP   = 0b00001000,
+    MPU9250_FSYNC_GYRO_X = 0b00010000,
+    MPU9250_FSYNC_GYRO_Y = 0b00011000,
+    MPU9250_FSYNC_GYRO_Z = 0b00100000,
+    MPU9250_FSYNC_ACC_X  = 0b00101000,
+    MPU9250_FSYNC_ACC_Y  = 0b00110000,
+    MPU9250_FSYNC_ACC_Z  = 0b00111000,
+} MPU9250_ext_fsync_set_t;
 
 extern const float MPU9250_GYRO_SENS[4];
 
 extern const float MPU9250_ACC_SENS[4];
 
 typedef struct {
-    float temp_sensitivity;
-    double room_temp_offset;
+    MPU9250_fifo_mode_t fifo_mode;
+    MPU9250_ext_fsync_set_t ext_fsync;
     MPU9250_gyro_fs_t gyro_fs;
-    MPU9250_acc_fs_t acc_fs;
     MPU9250_gyro_fchoice_t gyro_fchoice;
+    MPU9250_gyro_dlpf_cfg_t gyro_dlpf_cfg;
+    MPU9250_acc_fs_t acc_fs;
     int16_t acc_default_x_offs;
     int16_t acc_default_y_offs;
     int16_t acc_default_z_offs;
     float g;
+    float temp_sensitivity;
+    double room_temp_offset;
 } MPU9250_config_t;
 
 typedef struct {

@@ -20,15 +20,18 @@ const float MPU9250_ACC_SENS[4] = {16384, 8192, 4096, 2048};
  */
 MPU9250_config_t MPU9250_get_default_config(){
     MPU9250_config_t ret = {
-        .room_temp_offset = 0,
-        .temp_sensitivity = 333.87,
+        .fifo_mode = MPU9250_FIFO_REPLACE,
+        .ext_fsync = MPU9250_FSYNC_DIS,
         .gyro_fs = MPU9250_GYRO_FS_250,
+        .gyro_fchoice = MPU9250_GYRO_FCHOICE_2,
+        .gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0,
         .acc_fs = MPU9250_ACC_FS_2G,
-        .gyro_fchoice = MPU9250_GYRO_DLPF_EN,
-        .g = 9.8067,
         .acc_default_x_offs = 0, //-3176,
         .acc_default_y_offs = 0, //-6996,
         .acc_default_z_offs = 0, //10774,
+        .g = 9.8067,
+        .room_temp_offset = 0,
+        .temp_sensitivity = 333.87,
     };
     return ret;
 }
@@ -71,6 +74,26 @@ esp_err_t mpu9250_register_device(MPU9250_spi_device_t* dev, spi_host_device_t s
     };
 
     return spi_bus_add_device(spi_host, &devcfg, &(dev->dev_handle));
+}
+
+/**
+ * @brief Construct content of configuration register based on the device struct
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose configuration register content is to be constructed
+ * @return Register value
+ */
+static uint8_t build_config_reg(const MPU9250_spi_device_t* dev){
+    return 0b01111111 & (dev->config.fifo_mode | dev->config.ext_fsync | dev->config.gyro_dlpf_cfg);
+}
+
+/**
+ * @brief Construct content of gyroscope configuration register based on the device struct
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose gyroscope configuration register content is to be constructed
+ * @return Register value 
+ */
+static uint8_t build_gyro_config_reg(const MPU9250_spi_device_t* dev){
+    return 0b00011011 & ((dev->config.gyro_fs << 3) | (dev->config.gyro_fchoice^0b11));
 }
 
 /**
@@ -311,8 +334,8 @@ esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
  * @return ESP error code
  */
 esp_err_t mpu9250_set_gyro_fs(MPU9250_spi_device_t* dev, MPU9250_gyro_fs_t gyro_fs){
-    uint8_t byte = ((uint8_t)gyro_fs << 3) | (dev->config.gyro_fchoice ^ 0b11);
     dev->config.gyro_fs = gyro_fs;
+    uint8_t byte = build_gyro_config_reg(dev);
     return write_byte(dev, MPU9250_REG_GYRO_CONF, byte);
 }
 
