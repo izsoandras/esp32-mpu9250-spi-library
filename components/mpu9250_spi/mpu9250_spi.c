@@ -22,6 +22,7 @@ MPU9250_config_t MPU9250_get_default_config(){
     MPU9250_config_t ret = {
         .fifo_mode = MPU9250_FIFO_REPLACE,
         .ext_fsync = MPU9250_FSYNC_DIS,
+        .fifo_enabled = MPU9250_FIFO_DIS,
         .gyro_fs = MPU9250_GYRO_FS_250,
         .gyro_fchoice = MPU9250_GYRO_FCHOICE_2,
         .gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0,
@@ -32,7 +33,16 @@ MPU9250_config_t MPU9250_get_default_config(){
         .g = 9.8067,
         .room_temp_offset = 0,
         .temp_sensitivity = 333.87,
+        .i2c_mst_en = MPU9250_I2C_MASTER_DIS,
+        .i2c_slave0_len = 0,
+        .i2c_slave1_len = 0,
+        .i2c_slave2_len = 0,
     };
+
+    for(uint8_t i = 0; i < 8; i++){
+        ret.fifo_sources[i] = false;
+    }
+
     return ret;
 }
 
@@ -143,6 +153,16 @@ static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t
     return err;
 }
 
+/**
+ * @brief Convert a BigEndian, 2 length array of uint8_t bytes to int16_t
+ * 
+ * @param src Pointer to the byte array
+ * @return The result of the conversion
+ */
+inline int16_t bytes2int16(const uint8_t* src){
+    return (((int16_t)src[0]) << 8) | src[1];
+}
+
  /**
   * Read a 16 bit signed integer value from the given device, starting from the given register.
   * 
@@ -163,7 +183,7 @@ static esp_err_t read_uint16(const MPU9250_spi_device_t* dev, MPU9250_register_t
     };
 
     esp_err_t err = spi_device_polling_transmit(dev->dev_handle, &spi_tran);
-    *dest = (((int16_t)spi_tran.rx_data[0]) << 8) | spi_tran.rx_data[1];
+    *dest = bytes2int16(spi_tran.rx_data);
     return err;
 }
 
@@ -269,7 +289,18 @@ esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out){
 }
 
 /**
- * Read the tempearture registers (65, 66) of the given device
+ * @brief Convert the raw int16_t sensor reading to float in °C
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use for conversion
+ * @param raw_temp Raw temperature sensor data
+ * @return Temperature reading in °C
+ */
+inline float convert_temp(const MPU9250_spi_device_t* dev, int16_t raw_temp){
+    return (raw_temp - dev->config.room_temp_offset) / dev->config.temp_sensitivity + 21;
+}
+
+/**
+ * Read the temperature registers (65, 66) of the given device
  * 
  * Reads the temperature measurement from registers 65-66 and
  * copies the result to @see out in °C.
@@ -282,8 +313,19 @@ esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out){
 esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out){
     int16_t raw_temp;
     esp_err_t err = read_int16(dev, MPU9250_REG_TEMP, &raw_temp);
-    *out = (raw_temp - dev->config.room_temp_offset) / dev->config.temp_sensitivity + 21;
+    *out = convert_temp(dev, raw_temp);
     return err;
+}
+
+/**
+ * @brief Convert the raw int16_t sensor reading to float in °/s
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use for conversion
+ * @param raw_data Raw sensor data
+ * @return Angular velocity in °/s
+ */
+inline float convert_gyro(const MPU9250_spi_device_t* dev, int16_t raw_data){
+    return raw_data / MPU9250_GYRO_SENS[dev->config.gyro_fs];
 }
 
 /**
@@ -301,10 +343,36 @@ esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out){
     uint8_t gyro_data[6];
     esp_err_t err = read_n_bytes(dev, MPU9250_REG_GYRO_X, gyro_data, 6);
     
-    out->x = (int16_t)(gyro_data[0]<<8 | gyro_data[1]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
-    out->y = (int16_t)(gyro_data[2]<<8 | gyro_data[3]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
-    out->z = (int16_t)(gyro_data[4]<<8 | gyro_data[5]) / MPU9250_GYRO_SENS[dev->config.gyro_fs];
+    out->x = convert_gyro(dev, bytes2int16(gyro_data));
+    out->y = convert_gyro(dev, bytes2int16(gyro_data+2));
+    out->z = convert_gyro(dev, bytes2int16(gyro_data+4));
     return err;
+}
+
+/**
+ * @brief Convert the raw int16_t sensor reading to float in m/s^2
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use for conversion
+ * @param raw_data Raw sensor data
+ * @return Acceleration in m/s^2
+ */
+inline float convert_acc(const MPU9250_spi_device_t* dev, int16_t raw_data){
+    return raw_data / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
+}
+
+/**
+ * @brief Convert byte array to vec3_t containing the accelerometer measurements. Required for FIFO reading.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use for conversion
+ * @param buff Byte array
+ * @return Accelerometer measurement
+ */
+vec3_t convert_acc_vec(const MPU9250_spi_device_t* dev, uint8_t* buff){
+    vec3_t ret;
+    ret.x = convert_acc(dev, bytes2int16(buff));
+    ret.y = convert_acc(dev, bytes2int16(buff+2));
+    ret.z = convert_acc(dev, bytes2int16(buff+4));
+    return ret;
 }
 
 /**
@@ -322,11 +390,10 @@ esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out){
     uint8_t acc_data[6];
     esp_err_t err = read_n_bytes(dev, MPU9250_REG_ACC_X, acc_data, 6);
     
-    out->x = (int16_t)(acc_data[0]<<8 | acc_data[1]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
-    out->y = (int16_t)(acc_data[2]<<8 | acc_data[3]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
-    out->z = (int16_t)(acc_data[4]<<8 | acc_data[5]) / MPU9250_ACC_SENS[dev->config.acc_fs] * dev->config.g;
+    *out = convert_acc_vec(dev, acc_data);
+
     return err;
-}
+} 
 
 /**
  * Set gyroscope full scale. Sends the update to the sensor immediately.
@@ -486,4 +553,157 @@ esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_
     };
 
     return write_n_bytes(dev, MPU9250_REG_CONF, bytes, 2);
+}
+
+/**
+ * @brief Selects which sources are enabled to be written in the FIFO
+ * 
+ * IMPORTANT: use of slave 3 is not supported at the moment
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param temp_en Enable temperature to be written in FIFO
+ * @param gyro_x_en Enable X axis of gyroscope to be written in FIFO
+ * @param gyro_y_en Enable Y axis of gyroscope to be written in FIFO
+ * @param gyro_z_en Enable Z axis of gyroscope to be written in FIFO
+ * @param acc_en Enable every axis of gyroscope to be written in FIFO
+ * @param slv2_en Enable data of slave 2 to be written in FIFO
+ * @param slv1_en Enable data of slave 1 to be written in FIFO
+ * @param slv0_en Enable data of slave 0 to be written in FIFO
+ * 
+ * @return ESP error code 
+ */
+esp_err_t mpu9250_set_fifo_sources(MPU9250_spi_device_t* dev, const bool temp_en, const bool gyro_x_en, const bool gyro_y_en, const bool gyro_z_en, const bool acc_en, const bool slv2_en, const bool slv1_en, const bool slv0_en){
+    dev->config.fifo_sources[7] = temp_en;
+    dev->config.fifo_sources[6] = gyro_x_en;
+    dev->config.fifo_sources[5] = gyro_y_en;
+    dev->config.fifo_sources[4] = gyro_z_en;
+    dev->config.fifo_sources[3] = acc_en;
+    dev->config.fifo_sources[2] = slv2_en;
+    dev->config.fifo_sources[1] = slv1_en;
+    dev->config.fifo_sources[0] = slv0_en;
+
+    uint8_t byte = 0;
+    for(uint8_t i = 0; i < 8; i++){
+        if(dev->config.fifo_sources[i])
+            byte |= 1 << i;
+    }
+    return write_byte(dev, MPU9250_REG_FIFO_EN, byte);
+}
+
+/**
+ * @brief Set the FIFO enabled bit in USER_CTRL register according to the passed value
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param fifo_en Enable/disable FIFO
+ * @return ESP error code  
+ */
+esp_err_t mpu9250_set_fifo_enable(MPU9250_spi_device_t* dev, const MPU9250_fifo_enable_t fifo_en){
+    dev->config.fifo_enabled = fifo_en;
+    uint8_t byte = dev->config.fifo_enabled | dev->config.i2c_mst_en;
+    return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
+}
+
+/**
+ * @brief Read how many bytes are in the FIFO
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param cnt Location to write result
+ * @return ESP error code 
+ */
+esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt){
+    return read_uint16(dev, MPU9250_REG_FIFO_CNT, cnt);
+}
+
+/**
+ * @brief Read data from the FIFO
+ * 
+ * Read the data from the sensor FIFO according to the fifo_sources setting of dev.
+ * The unused buffers and function pointers can be NULL, however NO CHECKING is provided if
+ * the passed pointer is valid or not.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param sample_num Number of samples to be read
+ * @param temp_buff Buffer to store the temperature data. Ensure that it is large enough!
+ * @param gyro_x_buff Buffer to store the gyroscope X data. Ensure that it is large enough!
+ * @param gyro_y_buff Buffer to store the gyroscope Y data. Ensure that it is large enough!
+ * @param gyro_z_buff Buffer to store the gyroscope Z data. Ensure that it is large enough!
+ * @param acc_buff Buffer to store the accelerometer data. Ensure that it is large enough!
+ * @param slv2_buff Buffer to store the 2nd slave sensors data. Ensure that it is large enough! Define MPU9250_SLV2_TYPE accordingly! (before including this library)
+ * @param slv2_conv Conversion method from array of uint8_t to MPU9250_SLV2_TYPE
+ * @param slv1_buff Buffer to store the 1st slave sensors data. Ensure that it is large enough! Define MPU9250_SLV1_TYPE accordingly! (before including this library)
+ * @param slv1_conv Conversion method from array of uint8_t to MPU9250_SLV1_TYPE
+ * @param slv0_buff Buffer to store the 0th slave sensors data. Ensure that it is large enough! Define MPU9250_SLV0_TYPE accordingly! (before including this library)
+ * @param slv0_conv Conversion method from array of uint8_t to MPU9250_SLV0_TYPE
+ * @return ESP error code  
+ */
+esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num, float* temp_buff, float* gyro_x_buff, float* gyro_y_buff, float* gyro_z_buff, vec3_t* acc_buff, MPU9250_SLV2_TYPE* slv2_buff, MPU9250_SLV2_TYPE (*slv2_conv)(uint8_t*), MPU9250_SLV1_TYPE* slv1_buff, MPU9250_SLV1_TYPE (*slv1_conv)(uint8_t*), MPU9250_SLV0_TYPE* slv0_buff, MPU9250_SLV0_TYPE (*slv0_conv)(uint8_t*)){
+    // Store data and sample sizes
+    uint8_t data_sizes[] = {dev->config.i2c_slave0_len, dev->config.i2c_slave1_len, dev->config.i2c_slave2_len, 6, 2, 2, 2, 2};
+    uint8_t sample_size = 0;
+    for(uint8_t i = 0; i < 8; i++){
+        sample_size += data_sizes[i] * dev->config.fifo_sources[i];
+    }
+
+    // Perform read
+    uint8_t sample_buff[sample_num * sample_size];
+    esp_err_t spi_status;
+
+    spi_status = read_n_bytes(dev, MPU9250_REG_FIFO_READ, sample_buff, sample_num * sample_size);
+    if(spi_status != ESP_OK)
+        return spi_status;
+        
+    // Process and sort data
+    uint16_t sample_buff_idx = 0;
+    float* temp_curr = temp_buff;
+    float* gyro_x_curr = gyro_x_buff;
+    float* gyro_y_curr = gyro_y_buff;
+    float* gyro_z_curr = gyro_z_buff;
+    vec3_t* acc_curr = acc_buff;
+    MPU9250_SLV0_TYPE* slv0_curr = slv0_buff;
+    MPU9250_SLV1_TYPE* slv1_curr = slv1_buff;
+    MPU9250_SLV2_TYPE* slv2_curr = slv2_buff;
+    while(sample_buff_idx < sample_num * sample_size){
+        if(dev->config.fifo_sources[7]){
+            *temp_curr = convert_temp(dev, bytes2int16(sample_buff+sample_buff_idx));
+            sample_buff_idx += data_sizes[7];
+            temp_curr++;
+        }
+        if(dev->config.fifo_sources[6]){
+            *gyro_x_curr = convert_gyro(dev, bytes2int16(sample_buff+sample_buff_idx));
+            sample_buff_idx += data_sizes[6];
+            gyro_x_curr++;
+        }
+        if(dev->config.fifo_sources[5]){
+            *gyro_y_curr = convert_gyro(dev, bytes2int16(sample_buff+sample_buff_idx));
+            sample_buff_idx += data_sizes[5];
+            gyro_y_curr++;
+        }
+        if(dev->config.fifo_sources[4]){
+            *gyro_z_curr = convert_gyro(dev, bytes2int16(sample_buff+sample_buff_idx));
+            sample_buff_idx += data_sizes[4];
+            gyro_z_curr++;
+        }
+        if(dev->config.fifo_sources[3]){
+            *acc_curr = convert_acc_vec(dev, sample_buff+sample_buff_idx);
+            sample_buff_idx += data_sizes[3];
+            acc_curr++;
+        }
+        if(dev->config.fifo_sources[2]){
+            *slv2_curr = slv2_conv(sample_buff+sample_buff_idx);
+            sample_buff_idx += data_sizes[2];
+            slv2_curr++;
+        }
+        if(dev->config.fifo_sources[1]){
+            *slv1_curr = slv1_conv(sample_buff+sample_buff_idx);
+            sample_buff_idx += data_sizes[1];
+            slv1_curr++;
+        }
+        if(dev->config.fifo_sources[0]){
+            *slv0_curr = slv0_conv(sample_buff+sample_buff_idx);
+            sample_buff_idx += data_sizes[0];
+            slv0_curr++;
+        }
+    }
+
+    return spi_status;
 }
