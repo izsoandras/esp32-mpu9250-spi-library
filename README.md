@@ -1,4 +1,10 @@
 # MPU-9250 SPI library for ESP-IDF
+## Next steps
+
+- [ ] Check that DLPFs are working properly
+  - Record movement -> FFT -> see that cutoff frequency is at given point
+- [ ] Utilize I2C master to be able to read magnetometer
+
 ## Feature list
 
 | Implemented | Feature | Remark |
