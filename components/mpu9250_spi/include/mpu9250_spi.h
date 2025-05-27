@@ -26,6 +26,7 @@ typedef enum {
     MPU9250_REG_GYRO_OFFS_Z = 23,
     MPU9250_REG_CONF = 26,
     MPU9250_REG_GYRO_CONF = 27,
+    MPU9250_REG_ACC_CONF2 = 29,
     MPU9250_REG_ACC_CONF = 28,
     MPU9250_REG_FIFO_EN = 35,
     MPU9250_REG_ACC_X = 59,
@@ -90,6 +91,33 @@ typedef enum {
 } MPU9250_gyro_dlpf_bw_fs_t;
 
 typedef enum {
+    MPU9250_ACC_FCHOICE_OFF = 0,
+    MPU9250_ACC_FCHOICE_ON = 0b00001000,
+} MPU9250_acc_fchoice_t;
+
+typedef enum {
+    MPU2950_ACC_DLPF_CFG_0 = 0,
+    MPU2950_ACC_DLPF_CFG_1 = 1,
+    MPU2950_ACC_DLPF_CFG_2 = 2,
+    MPU2950_ACC_DLPF_CFG_3 = 3,
+    MPU2950_ACC_DLPF_CFG_4 = 4,
+    MPU2950_ACC_DLPF_CFG_5 = 5,
+    MPU2950_ACC_DLPF_CFG_6 = 6,
+    MPU2950_ACC_DLPF_CFG_7 = 7,
+} MPU9250_acc_dlpf_cfg_t;
+
+typedef enum {
+    MPU9250_ACC_DLPF_218Hz_1kHz = 1,
+    MPU9250_ACC_DLPF_99Hz_1kHz = 2,
+    MPU9250_ACC_DLPF_45Hz_1kHz = 3,
+    MPU9250_ACC_DLPF_21Hz_1kHz = 4,
+    MPU9250_ACC_DLPF_10Hz_1kHz = 5,
+    MPU9250_ACC_DLPF_5Hz_1kHz = 6,
+    MPU9250_ACC_DLPF_420Hz_1kHz = 7,
+    MPU9250_ACC_DLPF_1kHz_4kHz = 8,
+} MPU9250_acc_dlpf_bw_fs_t;
+
+typedef enum {
     MPU9250_FIFO_DIS = 0,
     MPU9250_FIFO_EN = 0b01000000,
 } MPU9250_fifo_enable_t;
@@ -142,6 +170,8 @@ typedef struct {
     int16_t acc_default_x_offs;
     int16_t acc_default_y_offs;
     int16_t acc_default_z_offs;
+    MPU9250_acc_fchoice_t acc_fchoice;
+    MPU9250_acc_dlpf_cfg_t acc_dlpf_cfg;
     float g;
     // Temperature sensor settings
     float temp_sensitivity;
@@ -188,6 +218,8 @@ esp_err_t mpu9250_update_default_acc_offs(MPU9250_spi_device_t* dev);
 esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs);
 
 esp_err_t mpu9250_set_fifo_sources(MPU9250_spi_device_t* dev, const bool temp_en, const bool gyro_x_en, const bool gyro_y_en, const bool gyro_z_en, const bool acc_en, const bool slv2_en, const bool slv1_en, const bool slv0_en);
+
+esp_err_t mpu9250_reset_fifo(const MPU9250_spi_device_t* dev);
 
 esp_err_t mpu9250_set_fifo_enable(MPU9250_spi_device_t* dev, const MPU9250_fifo_enable_t fifo_en);
 

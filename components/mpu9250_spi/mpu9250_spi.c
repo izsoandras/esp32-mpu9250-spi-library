@@ -30,6 +30,8 @@ MPU9250_config_t MPU9250_get_default_config(){
         .acc_default_x_offs = 0, //-3176,
         .acc_default_y_offs = 0, //-6996,
         .acc_default_z_offs = 0, //10774,
+        .acc_fchoice = MPU9250_ACC_FCHOICE_ON,
+        .acc_dlpf_cfg = MPU2950_ACC_DLPF_CFG_0,
         .g = 9.8067,
         .room_temp_offset = 0,
         .temp_sensitivity = 333.87,
@@ -460,6 +462,41 @@ esp_err_t mpu9250_set_gyro_offs(const MPU9250_spi_device_t* dev, float x_offs, f
 }
 
 /**
+ * @brief Change the DLPF setting for the gyroscope
+ * 
+ * Sets the FCHOICE_B and DLPF_CFG values of the sensor,
+ * based on the required digital low pass filter setting.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param dlpf_setting The cutoff-frequnecy/sample rate setting to set
+ * 
+ * @return ESP error code
+ */
+esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_fs_t dlpf_setting){
+    switch(dlpf_setting){
+        case MPU9250_GYRO_DLPF_8800Hz_32kHz:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_0;
+            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
+            break;
+        case MPU9250_GYRO_DLPF_3600Hz_32kHz:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_1;
+            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
+            break;
+        default:
+            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_2;
+            dev->config.gyro_dlpf_cfg = dlpf_setting;
+            break;
+    }
+
+    uint8_t bytes[2] = {
+        build_config_reg(dev),
+        build_gyro_config_reg(dev)
+    };
+
+    return write_n_bytes(dev, MPU9250_REG_CONF, bytes, 2);
+}
+
+/**
  * Overwrites the default accelerometer offset values.
  * 
  * Reads the current accelerometer offset values from the sensor and updates the
@@ -521,25 +558,21 @@ esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, fl
 }
 
 /**
- * @brief Change the DLPF setting for the gyroscope
+ * @brief Change the DLPF setting for the accelerometer
  * 
- * Sets the FCHOICE_B and DLPF_CFG values of the sensor,
+ * Sets the FCHOICE_B and DLPF_CFG values of the accelerometer,
  * based on the required digital low pass filter setting.
  * 
- * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param dev Pointer to the MPU9250_spi_device_t whose accelerometer DLPF setting is to be changed
  * @param dlpf_setting The cutoff-frequnecy/sample rate setting to set
  * 
  * @return ESP error code
  */
-esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_fs_t dlpf_setting){
+esp_err_t mpu9250_set_acc_dlpf(MPU9250_spi_device_t* dev, MPU9250_acc_dlpf_bw_fs_t dlpf_setting){
     switch(dlpf_setting){
-        case MPU9250_GYRO_DLPF_8800Hz_32kHz:
-            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_0;
-            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
-            break;
-        case MPU9250_GYRO_DLPF_3600Hz_32kHz:
-            dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_1;
-            dev->config.gyro_dlpf_cfg = MPU9250_GYRO_DLPF_CFG_0;
+        case MPU9250_ACC_DLPF_1kHz_4kHz:
+            dev->config.acc_fchoice = MPU9250_ACC_FCHOICE_OFF;
+            dev->config.gyro_dlpf_cfg = MPU2950_ACC_DLPF_CFG_0;
             break;
         default:
             dev->config.gyro_fchoice = MPU9250_GYRO_FCHOICE_2;
@@ -547,12 +580,9 @@ esp_err_t mpu9250_set_gyro_dlpf(MPU9250_spi_device_t* dev, MPU9250_gyro_dlpf_bw_
             break;
     }
 
-    uint8_t bytes[2] = {
-        build_config_reg(dev),
-        build_gyro_config_reg(dev)
-    };
+    uint8_t byte = dev->config.acc_fchoice || dev->config.gyro_dlpf_cfg;
 
-    return write_n_bytes(dev, MPU9250_REG_CONF, bytes, 2);
+    return write_n_bytes(dev, MPU9250_REG_ACC_CONF2, byte, 2);
 }
 
 /**
@@ -591,9 +621,20 @@ esp_err_t mpu9250_set_fifo_sources(MPU9250_spi_device_t* dev, const bool temp_en
 }
 
 /**
+ * @brief Reset the FIFO of the MPU9250
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose FIFO shall be reset
+ * @return esp_err_t error code
+ */
+esp_err_t mpu9250_reset_fifo(const MPU9250_spi_device_t* dev){
+    uint8_t byte = dev->config.fifo_enabled | dev->config.i2c_mst_en | MPU9250_FIFO_RST;
+    return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
+}
+
+/**
  * @brief Set the FIFO enabled bit in USER_CTRL register according to the passed value
  * 
- * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param dev Pointer to the MPU9250_spi_device_t whose FIFO should be enabled/disabled
  * @param fifo_en Enable/disable FIFO
  * @return ESP error code  
  */
@@ -637,11 +678,13 @@ esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt){
  * @return ESP error code  
  */
 esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num, float* temp_buff, float* gyro_x_buff, float* gyro_y_buff, float* gyro_z_buff, vec3_t* acc_buff, MPU9250_SLV2_TYPE* slv2_buff, MPU9250_SLV2_TYPE (*slv2_conv)(uint8_t*), MPU9250_SLV1_TYPE* slv1_buff, MPU9250_SLV1_TYPE (*slv1_conv)(uint8_t*), MPU9250_SLV0_TYPE* slv0_buff, MPU9250_SLV0_TYPE (*slv0_conv)(uint8_t*)){
+    //SOC_SPI_MAXIMUM_BUFFER_SIZE
     // Store data and sample sizes
     uint8_t data_sizes[] = {dev->config.i2c_slave0_len, dev->config.i2c_slave1_len, dev->config.i2c_slave2_len, 6, 2, 2, 2, 2};
     uint8_t sample_size = 0;
     for(uint8_t i = 0; i < 8; i++){
         sample_size += data_sizes[i] * dev->config.fifo_sources[i];
+        // printf("FIFO Sources: %d, %d\n", i, dev->config.fifo_sources[i]);
     }
 
     // Perform read
@@ -662,6 +705,7 @@ esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num
     MPU9250_SLV0_TYPE* slv0_curr = slv0_buff;
     MPU9250_SLV1_TYPE* slv1_curr = slv1_buff;
     MPU9250_SLV2_TYPE* slv2_curr = slv2_buff;
+    // return ESP_OK;
     while(sample_buff_idx < sample_num * sample_size){
         if(dev->config.fifo_sources[7]){
             *temp_curr = convert_temp(dev, bytes2int16(sample_buff+sample_buff_idx));
