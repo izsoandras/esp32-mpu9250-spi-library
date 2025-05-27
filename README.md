@@ -16,7 +16,7 @@
 | ✔️ | Set accelerometer digital lowpass filter | |
 | ✔️ | Reset FIFO | |
 | ✔️ | Set FIFO sources | |
-| ✔️ | Read FIFO | |
+| ✔️ | Read FIFO | ❗ Always uses memory buffer, instead of the fixed 4 byte registers |
 | | I2C master handling | |
 | | I2C slave control | |
 | | I2C sensor read | |
