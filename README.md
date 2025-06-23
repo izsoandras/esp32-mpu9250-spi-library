@@ -36,7 +36,7 @@
 | | Sample rate divider | |
 | | Gyroscope self-test | |
 | | Accelerometer self-test | |
-| | Interrupt capabilities | |
+| | Interrupt capabilities + I2C master bypass | |
 | | Power management | |
 | | Low power accelerometer ODR control | |
 | | Wake-on motion | |
