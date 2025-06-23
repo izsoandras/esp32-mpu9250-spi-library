@@ -48,6 +48,7 @@ typedef enum {
     MPU9250_REG_GYRO_Z = 71,
     MPU9250_REG_EXT_00 = 73,
     MPU9250_REG_SLV0_DO = 99,
+    MPU9250_REG_I2C_MST_DLY = 103,
     MPU9250_REG_USR_CTRL = 106,
     MPU9250_REG_PWR_MGMT_1 = 107,
     MPU9250_REG_FIFO_CNT = 114,
@@ -211,6 +212,21 @@ typedef struct {
     spi_device_handle_t dev_handle;
 } MPU9250_spi_device_t;
 
+/**
+ * @brief Structure to store the I2C master status data of the MPU9250 sensor (register 54)
+ * 
+ */
+typedef struct {
+    bool pass_through;
+    bool slv4_done;
+    bool lost_arbitration;
+    bool slv4_nack;
+    bool slv3_nack;
+    bool slv2_nack;
+    bool slv1_nack;
+    bool slv0_nack;
+} MPU9250_I2C_status_t;
+
 MPU9250_config_t MPU9250_get_default_config();
 
 MPU9250_spi_device_t mpu9250_create_device(int cs_pin);
@@ -223,6 +239,7 @@ esp_err_t mpu9250_read_whoami(const MPU9250_spi_device_t* dev, uint8_t* out);
 
 esp_err_t mpu9250_read_temp(const MPU9250_spi_device_t* dev, float* out);
 
+// Acc & gyro
 esp_err_t mpu9250_read_gyro(const MPU9250_spi_device_t* dev, vec3_t* out);
 
 esp_err_t mpu9250_read_acc(const MPU9250_spi_device_t* dev, vec3_t* out);
@@ -239,6 +256,7 @@ esp_err_t mpu9250_update_default_acc_offs(MPU9250_spi_device_t* dev);
 
 esp_err_t mpu9250_set_acc_offs(const MPU9250_spi_device_t* dev, float x_offs, float y_offs, float z_offs);
 
+// FIFO
 esp_err_t mpu9250_set_fifo_sources(MPU9250_spi_device_t* dev, const bool temp_en, const bool gyro_x_en, const bool gyro_y_en, const bool gyro_z_en, const bool acc_en, const bool slv2_en, const bool slv1_en, const bool slv0_en);
 
 esp_err_t mpu9250_reset_fifo(const MPU9250_spi_device_t* dev);
@@ -249,8 +267,18 @@ esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt);
 
 esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num, float* temp_buff, float* gyro_x_buff, float* gyro_y_buff, float* gyro_z_buff, vec3_t* acc_buff, MPU9250_SLV2_TYPE* slv2_buff, MPU9250_SLV2_TYPE (*slv2_conv)(uint8_t*), MPU9250_SLV1_TYPE* slv1_buff, MPU9250_SLV1_TYPE (*slv1_conv)(uint8_t*), MPU9250_SLV0_TYPE* slv0_buff, MPU9250_SLV0_TYPE (*slv0_conv)(uint8_t*));
 
+// I2C master
+esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_master_conf_t* conf);
+
+esp_err_t mpu9250_i2c_read_status(const MPU9250_spi_device_t* dev, MPU9250_I2C_status_t* status);
+
+esp_err_t mpu9250_i2c_write(const MPU9250_spi_device_t* dev, uint8_t dev_addr, uint8_t reg_addr, bool interrupt_en, uint8_t data);
+
 esp_err_t mpu9250_i2c_read(const MPU9250_spi_device_t* dev, uint8_t dev_addr, uint8_t reg_addr, bool interrupt_en, uint8_t* data);
 
+esp_err_t mpu9250_i2c_set_delay(MPU9250_spi_device_t* dev, uint8_t delay, bool slv0_delay_en, bool slv1_delay_en, bool slv2_delay_en, bool slv3_delay_en, bool slv4_delay_en, bool ext_shadow_delay_en);
+
+// Temporarily publc
 esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest);
 
 esp_err_t read_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, void* dest, size_t n);

@@ -766,11 +766,11 @@ esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num
  * 
  * @param dev Pointer to the MPU9250_spi_device_t whose I2C master configuration shall be changed
  * @param conf I2C master configuration struct
- * @return ESP error code (-1 if clock divider is out of range)
+ * @return ESP error code (-2 if clock divider is out of range)
  */
 esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_master_conf_t* conf){
     if(conf->clk_divider < 16 || conf->clk_divider > 31)
-        return -1;
+        return -2;
 
     dev->config.i2c_mst_conf = *conf;
     uint8_t conf_byte = (conf->clk_divider - 7) % 16;
@@ -786,6 +786,26 @@ esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_mast
     return write_byte(dev, MPU9250_REG_I2C_MST_CONF, conf_byte);
 }
 
+/**
+ * @brief Read the status register of the I2C master
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param status Output variable to save the status
+ * @return esp_err_t ESP_OK if communication is successfull, otherwise error code
+ */
+esp_err_t mpu9250_i2c_read_status(const MPU9250_spi_device_t* dev, MPU9250_I2C_status_t* status){
+    uint8_t status_byte;
+    esp_err_t err = read_byte(dev, MPU9250_REG_I2C_MST_STATUS, &status_byte);
+    status->pass_through = status_byte & (1 << 7);
+    status->slv4_done = status_byte & (1 << 6);
+    status->lost_arbitration = status_byte & (1 << 5);
+    status->slv4_nack = status_byte & (1 << 4);
+    status->slv3_nack = status_byte & (1 << 3);
+    status->slv2_nack = status_byte & (1 << 2);
+    status->slv1_nack = status_byte & (1 << 1);
+    status->slv0_nack = status_byte & (1 << 0);
+    return err;
+}
 
 /**
  * @brief Write a register on the auxiliary I2C line of the MPU9250 sensor
@@ -793,6 +813,7 @@ esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_mast
  * Write a register of an I2C device on the auxiliary I2C line.
  * Only polling operation is implemented (code actively waits for I2C transaction completion by polling throuh SPI).
  * NOTE that I2C slave 4 is used for ease of operation.
+ * NOTE that write to register is not disabled
  * 
  * @param dev Pointer to the MPU9250_spi_device_t to be used
  * @param dev_addr I2C address of the device that should be written
@@ -821,12 +842,12 @@ esp_err_t mpu9250_i2c_write(const MPU9250_spi_device_t* dev, uint8_t dev_addr, u
         return err;
 
     // Poll for completion
-    uint8_t status;
+    MPU9250_I2C_status_t status;
     do{
-        err = read_byte(dev, MPU9250_REG_I2C_MST_STATUS, &status);
+        err = mpu9250_i2c_read_status(dev, &status);
         if(err != ESP_OK)
             return err;
-    }while(!(status & 0x40));
+    }while(!status.slv4_done);
 
     return ESP_OK;
 }
@@ -852,4 +873,44 @@ esp_err_t mpu9250_i2c_read(const MPU9250_spi_device_t* dev, uint8_t dev_addr, ui
     mpu9250_i2c_write(dev, dev_addr, reg_addr, interrupt_en, 0);
     // Read answer
     return read_byte(dev, MPU9250_REG_SLV4_DI, data_buff);
+}
+
+/**
+ * @brief Set the amount and enabling of master delay for different slaves and external shadowing.
+ * 
+ * Set the amount of delay (~sample rate divide) for the I2C master and select the slaves,
+ * for which the delay is enabled. Also set if shadowing of external sensor data is delayed
+ * NOTE that this function overwrites slave 4 control register (52).
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param delay Read the data only every 1+delay number of sample periods
+ * @param slv0_delay_en Enable the delay for slave 0
+ * @param slv1_delay_en Enable the delay for slave 1
+ * @param slv2_delay_en Enable the delay for slave 2
+ * @param slv3_delay_en Enable the delay for slave 3
+ * @param slv4_delay_en Enable the delay for slave 4
+ * @param ext_shadow_delay_en Delays shadowing of external sensor data until all data is received
+ * @return esp_err_t 
+ */
+esp_err_t mpu9250_i2c_set_delay(MPU9250_spi_device_t* dev, uint8_t delay, bool slv0_delay_en, bool slv1_delay_en, bool slv2_delay_en, bool slv3_delay_en, bool slv4_delay_en, bool ext_shadow_delay_en){
+    // Check if delay amount is within range
+    if(delay >= 16)
+        return -2;
+
+    dev->config.i2c_mst_conf.mst_dly = delay;
+    // Overwrite SLV4 control register!
+    esp_err_t err = write_byte(dev, MPU9250_REG_SLV4_CTRL, delay);
+    if(err != ESP_OK)
+        return err;
+
+    uint8_t byte = 0;
+
+    bool array[8] = {slv0_delay_en, slv1_delay_en, slv2_delay_en, slv3_delay_en, slv4_delay_en, 0, 0, ext_shadow_delay_en};
+
+    for(uint8_t i = 0; i<8; i++){
+        if(array[i])
+            byte |= 1 << i;
+    }
+
+    return write_byte(dev, MPU9250_REG_I2C_MST_DLY, byte);
 }
