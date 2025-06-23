@@ -10,6 +10,13 @@
   - Magnetometer
   - I2C master
   - other?
+     
+## Test backlog
+
+- I2C configuration register
+- I2C write
+- I2C master delay
+- I2C status register
 
 ## Feature list
 
