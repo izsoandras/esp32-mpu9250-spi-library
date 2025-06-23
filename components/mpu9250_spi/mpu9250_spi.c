@@ -39,6 +39,12 @@ MPU9250_config_t MPU9250_get_default_config(){
         .i2c_slave0_len = 0,
         .i2c_slave1_len = 0,
         .i2c_slave2_len = 0,
+        .i2c_mst_conf = {
+            .mult_mast_en = false,
+            .wait_ext_sens = false,
+            .stop_btw_reads = false,
+            .clk_divider = 23,
+        },
     };
 
     for(uint8_t i = 0; i < 8; i++){
@@ -582,7 +588,7 @@ esp_err_t mpu9250_set_acc_dlpf(MPU9250_spi_device_t* dev, MPU9250_acc_dlpf_bw_fs
 
     uint8_t byte = dev->config.acc_fchoice || dev->config.gyro_dlpf_cfg;
 
-    return write_n_bytes(dev, MPU9250_REG_ACC_CONF2, byte, 2);
+    return write_byte(dev, MPU9250_REG_ACC_CONF2, byte);
 }
 
 /**
@@ -662,7 +668,7 @@ esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt){
  * The unused buffers and function pointers can be NULL, however NO CHECKING is provided if
  * the passed pointer is valid or not.
  * 
- * @param dev Pointer to the MPU9250_spi_device_t whose DLPF setting is to be changed
+ * @param dev Pointer to the MPU9250_spi_device_t whose FIFO is to be read
  * @param sample_num Number of samples to be read
  * @param temp_buff Buffer to store the temperature data. Ensure that it is large enough!
  * @param gyro_x_buff Buffer to store the gyroscope X data. Ensure that it is large enough!
@@ -750,4 +756,100 @@ esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num
     }
 
     return spi_status;
+}
+
+/**
+ * @brief Change I2C master configuration
+ * 
+ * Change multiple master mode, stop between reads, wait for external and
+ * clock divider, relative to the 8Mhz sensor core.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t whose I2C master configuration shall be changed
+ * @param conf I2C master configuration struct
+ * @return ESP error code (-1 if clock divider is out of range)
+ */
+esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_master_conf_t* conf){
+    if(conf->clk_divider < 16 || conf->clk_divider > 31)
+        return -1;
+
+    dev->config.i2c_mst_conf = *conf;
+    uint8_t conf_byte = (conf->clk_divider - 7) % 16;
+    if(conf->mult_mast_en)
+        conf_byte ^= 0b10000000;
+    if(conf->wait_ext_sens)
+        conf_byte ^= 0b01000000;
+    if(dev->config.slv3_fifo_en)
+        conf_byte ^= 0b00100000;
+    if(conf->stop_btw_reads)
+        conf_byte ^= 0b00010000;
+
+    return write_byte(dev, MPU9250_REG_I2C_MST_CONF, conf_byte);
+}
+
+
+/**
+ * @brief Write a register on the auxiliary I2C line of the MPU9250 sensor
+ * 
+ * Write a register of an I2C device on the auxiliary I2C line.
+ * Only polling operation is implemented (code actively waits for I2C transaction completion by polling throuh SPI).
+ * NOTE that I2C slave 4 is used for ease of operation.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param dev_addr I2C address of the device that should be written
+ * @param reg_addr Register of the device that should be written
+ * @param interrupt_en Decide whether an interrupt should be requested by the sensor when the operation is complete
+ * @param data Data to be written in the register
+ * @return esp_err_t The ESP error code that is occured during one of the SPI transactions, ESP_OK if operation is successful
+ */
+esp_err_t mpu9250_i2c_write(const MPU9250_spi_device_t* dev, uint8_t dev_addr, uint8_t reg_addr, bool interrupt_en, uint8_t data){
+    // Build SPI package, required registers are continously after eachother
+    uint8_t bytes[] = {
+        dev_addr,
+        reg_addr,           
+        data, // data out
+        0x80 ^ dev->config.i2c_mst_conf.mst_dly // enable transaction + set master delay
+    };
+
+    // set if interrupt is enabled upon transaction completion
+    if(interrupt_en)
+        bytes[3] ^= 0x40;
+
+    // write message data to sensor
+    esp_err_t err;
+    err = write_n_bytes(dev, MPU9250_REG_SLV4_ADDR, bytes, 4);
+    if(err != ESP_OK)
+        return err;
+
+    // Poll for completion
+    uint8_t status;
+    do{
+        err = read_byte(dev, MPU9250_REG_I2C_MST_STATUS, &status);
+        if(err != ESP_OK)
+            return err;
+    }while(!(status & 0x40));
+
+    return ESP_OK;
+}
+
+/**
+ * @brief Read a register on the auxiliary I2C line of the MPU9250 sensor
+ * 
+ * Read a register of an I2C device on the auxiliary I2C line.
+ * Only polling operation is implemented (code actively waits for I2C transaction completion by polling throuh SPI).
+ * NOTE that I2C slave 4 is used for ease of operation.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param dev_addr I2C address of the device that should be read
+ * @param reg_addr Register of the device that should be read
+ * @param interrupt_en Decide whether an interrupt should be requested by the sensor when the operation is complete
+ * @param data_buff Pointer to the location where the result shall be saved
+ * @return esp_err_t The ESP error code that is occured during one of the SPI transactions, ESP_OK if operation is successful
+ */
+esp_err_t mpu9250_i2c_read(const MPU9250_spi_device_t* dev, uint8_t dev_addr, uint8_t reg_addr, bool interrupt_en, uint8_t* data_buff){
+    // set read address
+    dev_addr |= 0x80;   
+    // Perform I2C transaction
+    mpu9250_i2c_write(dev, dev_addr, reg_addr, interrupt_en, 0);
+    // Read answer
+    return read_byte(dev, MPU9250_REG_SLV4_DI, data_buff);
 }
