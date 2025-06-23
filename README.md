@@ -4,6 +4,12 @@
 - [ ] Check that DLPFs are working properly
   - Record movement -> FFT -> see that cutoff frequency is at given point
 - [ ] Utilize I2C master to be able to read magnetometer
+- [ ] Separate different parts of the sensor to different source files and encapsulate parameterization in structs
+  - Accelerometer
+  - Gyroscope
+  - Magnetometer
+  - I2C master
+  - other?
 
 ## Feature list
 
