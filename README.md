@@ -2,9 +2,11 @@
 ## Next steps
 
 - [ ] Utilize I2C master to be able to read magnetometer
-  - Test basic I2C functionality
-  - I2C slave control
-  - Add sensor reading functionality
+  - modify I2C configuration to be similar to FIFO enable and reset architecture
+  - Test
+    - basic I2C functionality
+    - I2C slave control
+    - sensor reading functionality
 - [ ] Separate different parts of the sensor to different source files and encapsulate parameterization in structs
   - Accelerometer
   - Gyroscope
