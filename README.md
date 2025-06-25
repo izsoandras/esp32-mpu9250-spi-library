@@ -49,6 +49,7 @@
 | | Gyroscope self-test | |
 | | Accelerometer self-test | |
 | | Interrupt capabilities + I2C master bypass | |
+| | Make use of slave 0-3 Data Out registers | |
 | | Power management | |
 | | Low power accelerometer ODR control | |
 | | Wake-on motion | |
