@@ -25,6 +25,7 @@
 
 | Implemented | Feature | Remark |
 | :-----------: | ------- | ------ |
+| ✔️ | SPI communication | Always using polling transmit, ❗ read_n_bytes always uses buffer, but write switches between buffer and txdata |
 | ✔️ | Reset sensor | |
 | ✔️ | Read whoami | |
 | ✔️ | Read temperature sensor | |
