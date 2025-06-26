@@ -7,6 +7,10 @@
     - basic I2C functionality
     - I2C slave control
     - sensor reading functionality
+- [ ] Clean up FIFO impelemntation
+    - move slv3_fifo_en to the array
+    - create enum for FIFO source indices with names
+    - measurements are moved to the FIFO in increasing register order (acc, temp, gyro, slv0->3) -> fix in FIFO read implementation
 - [ ] Separate different parts of the sensor to different source files and encapsulate parameterization in structs
   - Accelerometer
   - Gyroscope
