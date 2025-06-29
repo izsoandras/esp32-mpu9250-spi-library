@@ -1,12 +1,7 @@
 # MPU-9250 SPI library for ESP-IDF
 ## Next steps
 
-- [ ] Utilize I2C master to be able to read magnetometer
-  - modify I2C configuration to be similar to FIFO enable and reset architecture
-  - Test
-    - basic I2C functionality
-    - I2C slave control
-    - sensor reading functionality
+
 - [ ] Clean up FIFO impelemntation
     - move slv3_fifo_en to the array
     - create enum for FIFO source indices with names
@@ -14,19 +9,16 @@
 - [ ] Separate different parts of the sensor to different source files and encapsulate parameterization in structs
   - Accelerometer
   - Gyroscope
-  - Magnetometer
   - I2C master
   - other?
+- [ ] Magentometer
 - [ ] Check that DLPFs are working properly
   - Record movement -> FFT -> see that cutoff frequency is at given point
 - [ ] Test FIFO with I2C slaves
      
 ## Test backlog
 
-- I2C configuration register
-- I2C write
-- I2C master delay
-- I2C status register
+- I2C master delay \w scope
 
 ## Feature list
 
@@ -48,8 +40,8 @@
 | ✔️ | Set FIFO sources | |
 | ✔️ | Read FIFO | ❗ Always uses memory buffer, instead of the fixed 4 byte registers |
 | ⚠️ | I2C master handling | Default read/write always uses slave 4 |
-| | I2C slave control | |
-| | I2C sensor read | |
+| ✔️ | I2C slave control | |
+| ✔️ | I2C sensor read | |
 | | Magnetometer handling | |
 | | Sample rate divider | |
 | | Gyroscope self-test | |
