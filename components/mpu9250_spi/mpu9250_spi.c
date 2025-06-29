@@ -14,6 +14,11 @@ const float MPU9250_GYRO_SENS[4] = {131.072, 65.536, 32.768, 16.384};
 const float MPU9250_ACC_SENS[4] = {16384, 8192, 4096, 2048};
 
 /**
+ * Grouping the I2C addresses where the configuration of I2C slaves start.
+ */
+const uint8_t MPU9250_SLV_CONF_ADDR[4] = {MPU9250_REG_SLV0_ADDR, MPU9250_REG_SLV1_ADDR, MPU9250_REG_SLV2_ADDR, MPU9250_REG_SLV3_ADDR};
+
+/**
  * Initialize an MPU9250_config_t with default values
  * 
  * @return Default configuration set for the sensor
@@ -35,11 +40,8 @@ MPU9250_config_t MPU9250_get_default_config(){
         .g = 9.8067,
         .room_temp_offset = 0,
         .temp_sensitivity = 333.87,
-        .i2c_mst_en = MPU9250_I2C_MASTER_DIS,
-        .i2c_slave0_len = 0,
-        .i2c_slave1_len = 0,
-        .i2c_slave2_len = 0,
         .i2c_mst_conf = {
+            .i2c_mst_en = MPU9250_I2C_MASTER_DIS,
             .mult_mast_en = false,
             .wait_ext_sens = false,
             .stop_btw_reads = false,
@@ -49,6 +51,14 @@ MPU9250_config_t MPU9250_get_default_config(){
 
     for(uint8_t i = 0; i < 8; i++){
         ret.fifo_sources[i] = false;
+    }
+
+    for(uint8_t i = 0; i < 4; i++){
+        ret.slave_confs[i].length = 0;
+        ret.slave_confs[i].enabled = false;
+        ret.slave_confs[i].switch_bytes = false;
+        ret.slave_confs[i].disable_reg_write = false;
+        ret.slave_confs[i].group_shift = false;
     }
 
     return ret;
@@ -627,13 +637,30 @@ esp_err_t mpu9250_set_fifo_sources(MPU9250_spi_device_t* dev, const bool temp_en
 }
 
 /**
+ * @brief Create the User Control register content based on the given data
+ * 
+ * @param dev Pointer to the MPU9250 device to use
+ * @param reset_flags Created from bitwise or of MPU9250_rst_t values
+ * @param output Pointer to where register content should be put
+ * @return esp_err_t -2 if reset flags are invalid, ESP_OK otherwise
+ */
+esp_err_t build_user_control_reg(const MPU9250_spi_device_t* dev, MPU9250_rst_t reset_flags, uint8_t* output){
+    if(reset_flags >= 32)
+        return -2;
+    
+    *output = dev->config.fifo_enabled | dev->config.i2c_mst_conf.i2c_mst_en | reset_flags;
+    return ESP_OK;
+}
+
+/**
  * @brief Reset the FIFO of the MPU9250
  * 
  * @param dev Pointer to the MPU9250_spi_device_t whose FIFO shall be reset
  * @return esp_err_t error code
  */
 esp_err_t mpu9250_reset_fifo(const MPU9250_spi_device_t* dev){
-    uint8_t byte = dev->config.fifo_enabled | dev->config.i2c_mst_en | MPU9250_FIFO_RST;
+    uint8_t byte;
+    build_user_control_reg(dev, MPU9250_RST_FIFO, &byte); // reset flag should always be valid
     return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
 }
 
@@ -646,7 +673,8 @@ esp_err_t mpu9250_reset_fifo(const MPU9250_spi_device_t* dev){
  */
 esp_err_t mpu9250_set_fifo_enable(MPU9250_spi_device_t* dev, const MPU9250_fifo_enable_t fifo_en){
     dev->config.fifo_enabled = fifo_en;
-    uint8_t byte = dev->config.fifo_enabled | dev->config.i2c_mst_en;
+    uint8_t byte;
+    build_user_control_reg(dev, MPU9250_RST_NONE, &byte);
     return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
 }
 
@@ -685,12 +713,15 @@ esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt){
  */
 esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num, float* temp_buff, float* gyro_x_buff, float* gyro_y_buff, float* gyro_z_buff, vec3_t* acc_buff, MPU9250_SLV2_TYPE* slv2_buff, MPU9250_SLV2_TYPE (*slv2_conv)(uint8_t*), MPU9250_SLV1_TYPE* slv1_buff, MPU9250_SLV1_TYPE (*slv1_conv)(uint8_t*), MPU9250_SLV0_TYPE* slv0_buff, MPU9250_SLV0_TYPE (*slv0_conv)(uint8_t*)){
     //SOC_SPI_MAXIMUM_BUFFER_SIZE
-    // Store data and sample sizes
-    uint8_t data_sizes[] = {dev->config.i2c_slave0_len, dev->config.i2c_slave1_len, dev->config.i2c_slave2_len, 6, 2, 2, 2, 2};
+    // Store data and sample sizes (slave 0-2, accel, gyro x-y-z, temp)
+    uint8_t data_sizes[8] = {0, 0, 0, 6, 2, 2, 2, 2};
+    for(uint8_t i = 0; i < 3; i++){
+        data_sizes[i] = dev->config.slave_confs[i].length;
+    }
+
     uint8_t sample_size = 0;
     for(uint8_t i = 0; i < 8; i++){
         sample_size += data_sizes[i] * dev->config.fifo_sources[i];
-        // printf("FIFO Sources: %d, %d\n", i, dev->config.fifo_sources[i]);
     }
 
     // Perform read
@@ -756,6 +787,32 @@ esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num
     }
 
     return spi_status;
+}
+
+/**
+ * @brief Reset the I2C master of the MPU9250
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use
+ * @return esp_err_t error code
+ */
+esp_err_t mpu9250_i2c_mst_reset(const MPU9250_spi_device_t* dev){
+    uint8_t byte;
+    build_user_control_reg(dev, MPU9250_RST_I2C_MASTER, &byte); // reset flag should always be valid
+    return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
+}
+
+/**
+ * @brief Set the I2C master enabled bit in USER_CTRL register according to the passed value
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to use
+ * @param fifo_en Enable/disable I2C master
+ * @return ESP error code  
+ */
+esp_err_t mpu9250_set_i2c_master_enable(MPU9250_spi_device_t* dev, const MPU9250_i2c_master_enable_t i2c_mst_en){
+    dev->config.i2c_mst_conf.i2c_mst_en = i2c_mst_en;
+    uint8_t byte;
+    build_user_control_reg(dev, MPU9250_RST_NONE, &byte);
+    return write_byte(dev, MPU9250_REG_USR_CTRL, byte);
 }
 
 /**
@@ -913,4 +970,100 @@ esp_err_t mpu9250_i2c_set_delay(MPU9250_spi_device_t* dev, uint8_t delay, bool s
     }
 
     return write_byte(dev, MPU9250_REG_I2C_MST_DLY, byte);
+}
+
+/**
+ * @brief Creates the slave control register content based on the configuration struct
+ * 
+ * @param conf Configuration of the slave
+ * @param output Memory location where byte should be written
+ * @return int -1 if length is out of range, ESP_OK otherwise
+ */
+esp_err_t build_i2c_slv_ctrl_byte(const MPU9250_slv_conf_t* conf, uint8_t* output){
+    // Check for length within limit
+    if(conf->length >= 16)
+        return -2;
+
+    uint8_t byte = conf->length;
+
+    if(conf->enabled)
+        byte ^= 1 << 7;
+    if(conf->switch_bytes)
+        byte ^= 1 << 6;
+    if(conf->disable_reg_write)
+        byte ^= 1 << 5;
+    if(conf->group_shift)
+        byte ^= 1 << 4;
+
+    *output = byte;
+
+    return ESP_OK;
+}
+
+/**
+ * @brief Change configuration of an I2C slave
+ * 
+ * Updates configuration of the given slave and writes it to the sensor.
+ * Returns -2 if the length of I2C slave data is out of range.
+ * NOTE that only READ configuration is possible.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param slave_id Slave identifier enum
+ * @param addr Address of the I2C slave (extended with read bit automatically)
+ * @param reg Register of I2C slave
+ * @param conf I2C slave configuration structure
+ * @return esp_err_t -2 if the slave data length is out of range, result of the SPI communication otherwise (ESP_OK if successful)
+ */
+esp_err_t mpu9250_i2c_configure_slv(MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, uint8_t addr, uint8_t reg, const MPU9250_slv_conf_t* conf){
+
+    // Extend with read bit
+    uint8_t bytes[3] = {addr ^ (1 << 7), reg, 0};
+    if(build_i2c_slv_ctrl_byte(conf, bytes+2) != ESP_OK)
+        return -2;
+
+    dev->config.slave_confs[slave_id] = *conf;
+
+    printf("%d\t%d\t%d\t%d", MPU9250_SLV_CONF_ADDR[slave_id], bytes[0], bytes[1], bytes[2]);
+    // SPI write
+    return write_n_bytes(dev, MPU9250_SLV_CONF_ADDR[slave_id], bytes, 3);
+}
+
+/**
+ * @brief Enable/Disable sampling the given slave device at the sample rate set by dlpf_cfg, sample rate divider and i2c master delay.
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param slave_id The slave to be enabled
+ * @param enable Select whether slave is enabled or disabled
+ * @return esp_err_t Configuration/SPI communication error
+ */
+esp_err_t mpu9250_i2c_set_slv_enable(MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, bool enable){
+    dev->config.slave_confs[slave_id].enabled = enable;
+    uint8_t byte;
+
+    esp_err_t res = build_i2c_slv_ctrl_byte(dev->config.slave_confs+slave_id, &byte);
+    if(res != ESP_OK)
+        return res;
+
+    // Send configuration through SPI, address is always 2 after the address register
+    return write_byte(dev, MPU9250_SLV_CONF_ADDR[slave_id]+2, byte);
+}
+
+/**
+ * @brief Read data of the given slave from the External Sensor Data registers
+ * 
+ * @param dev Pointer to the MPU9250_spi_device_t to be used
+ * @param slave_id The slave to be read
+ * @param buff Location to read the data into. Make sure that it fits!
+ * @return esp_err_t SPI communication error (ESP_OK if no error), -2 if requested slave is not enabled
+ */
+esp_err_t mpu9250_i2c_read_ext(const MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, uint8_t* buff){
+    if(!dev->config.slave_confs[slave_id].enabled)
+        return -2;
+
+    uint8_t start_reg = MPU9250_REG_EXT_00;
+    for(uint8_t i = 0; i < slave_id; i++)
+        if(dev->config.slave_confs[i].enabled)
+            start_reg += dev->config.slave_confs[i].length;
+
+    return read_n_bytes(dev, start_reg, buff, dev->config.slave_confs[slave_id].length);
 }

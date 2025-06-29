@@ -33,6 +33,15 @@ typedef enum {
     MPU9250_REG_SLV0_ADDR = 37,
     MPU9250_REG_SLV0_REG = 38,
     MPU9250_REG_SLV0_CTRL = 39,
+    MPU9250_REG_SLV1_ADDR = 40,
+    MPU9250_REG_SLV1_REG = 41,
+    MPU9250_REG_SLV1_CTRL = 42,
+    MPU9250_REG_SLV2_ADDR = 43,
+    MPU9250_REG_SLV2_REG = 44,
+    MPU9250_REG_SLV2_CTRL = 45,
+    MPU9250_REG_SLV3_ADDR = 46,
+    MPU9250_REG_SLV3_REG = 47,
+    MPU9250_REG_SLV3_CTRL = 48,
     MPU9250_REG_SLV4_ADDR = 49,
     MPU9250_REG_SLV4_REG = 50,
     MPU9250_REG_SLV4_DO = 51,
@@ -141,10 +150,11 @@ typedef enum {
 } MPU9250_i2c_master_enable_t;
 
 typedef enum {
-    MPU9250_I2C_IF_DIS =       0b00010000,
-    MPU9250_FIFO_RST =         0b00000100,
-    MPU9250_I2C_MASTER_RST =   0b00000010,
-    MPU92550_SIGNAL_PATH_RST = 0b00000001
+    MPU9250_RST_NONE =          0,
+    MPU9250_RST_I2C_INTERFACE = 0b00010000,
+    MPU9250_RST_FIFO =          0b00000100,
+    MPU9250_RST_I2C_MASTER =    0b00000010,
+    MPU92550_RST_SIGNAL_PATH =  0b00000001
 } MPU9250_rst_t;
 
 typedef enum {
@@ -163,11 +173,28 @@ typedef enum {
     MPU9250_FSYNC_ACC_Z  = 0b00111000,
 } MPU9250_ext_fsync_set_t;
 
+typedef enum {
+    MPU9250_SLV0 = 0,
+    MPU9250_SLV1 = 1,
+    MPU9250_SLV2 = 2,
+    MPU9250_SLV3 = 3,
+    // Slave 4 is missing intentionally, because it is operated differently and used for direct communication
+} MPU9250_slave_t;
+
+typedef struct {
+    uint8_t length;
+    bool enabled;
+    bool switch_bytes;
+    bool disable_reg_write;
+    bool group_shift;
+} MPU9250_slv_conf_t;
+
 extern const float MPU9250_GYRO_SENS[4];
 
 extern const float MPU9250_ACC_SENS[4];
 
 typedef struct {
+    MPU9250_i2c_master_enable_t i2c_mst_en;
     bool mult_mast_en;
     bool wait_ext_sens;
     bool stop_btw_reads;
@@ -179,6 +206,7 @@ typedef struct MPU9250_config {
     // FIFO settings
     MPU9250_fifo_mode_t fifo_mode;
     bool fifo_sources[8];           // slave 3 support should be added here at index 8
+    bool slv3_fifo_en;
     MPU9250_fifo_enable_t fifo_enabled;
     // External settings
     MPU9250_ext_fsync_set_t ext_fsync;
@@ -198,12 +226,8 @@ typedef struct MPU9250_config {
     float temp_sensitivity;
     double room_temp_offset;
     // I2C settings
-    MPU9250_i2c_master_enable_t i2c_mst_en;
-    uint8_t i2c_slave0_len;
-    uint8_t i2c_slave1_len;
-    uint8_t i2c_slave2_len;
-    bool slv3_fifo_en;
     MPU9250_I2C_master_conf_t i2c_mst_conf;
+    MPU9250_slv_conf_t slave_confs[4];
 } MPU9250_config_t;
 
 typedef struct {
@@ -268,6 +292,10 @@ esp_err_t mpu9250_read_fifo_count(MPU9250_spi_device_t* dev, uint16_t* cnt);
 esp_err_t mpu9250_read_fifo(const MPU9250_spi_device_t* dev, uint16_t sample_num, float* temp_buff, float* gyro_x_buff, float* gyro_y_buff, float* gyro_z_buff, vec3_t* acc_buff, MPU9250_SLV2_TYPE* slv2_buff, MPU9250_SLV2_TYPE (*slv2_conv)(uint8_t*), MPU9250_SLV1_TYPE* slv1_buff, MPU9250_SLV1_TYPE (*slv1_conv)(uint8_t*), MPU9250_SLV0_TYPE* slv0_buff, MPU9250_SLV0_TYPE (*slv0_conv)(uint8_t*));
 
 // I2C master
+esp_err_t mpu9250_i2c_mst_reset(const MPU9250_spi_device_t* dev);
+
+esp_err_t mpu9250_set_i2c_master_enable(MPU9250_spi_device_t* dev, const MPU9250_i2c_master_enable_t i2c_mst_en);
+
 esp_err_t mpu9250_i2c_mst_conf(MPU9250_spi_device_t* dev, const MPU9250_I2C_master_conf_t* conf);
 
 esp_err_t mpu9250_i2c_read_status(const MPU9250_spi_device_t* dev, MPU9250_I2C_status_t* status);
@@ -277,6 +305,12 @@ esp_err_t mpu9250_i2c_write(const MPU9250_spi_device_t* dev, uint8_t dev_addr, u
 esp_err_t mpu9250_i2c_read(const MPU9250_spi_device_t* dev, uint8_t dev_addr, uint8_t reg_addr, bool interrupt_en, uint8_t* data);
 
 esp_err_t mpu9250_i2c_set_delay(MPU9250_spi_device_t* dev, uint8_t delay, bool slv0_delay_en, bool slv1_delay_en, bool slv2_delay_en, bool slv3_delay_en, bool slv4_delay_en, bool ext_shadow_delay_en);
+
+esp_err_t mpu9250_i2c_configure_slv(MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, uint8_t addr, uint8_t reg, const MPU9250_slv_conf_t* conf);
+
+esp_err_t mpu9250_i2c_set_slv_enable(MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, bool enable);
+
+esp_err_t mpu9250_i2c_read_ext(const MPU9250_spi_device_t* dev, MPU9250_slave_t slave_id, uint8_t* buff);
 
 // Temporarily publc
 esp_err_t read_int16(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, int16_t* dest);
@@ -288,5 +322,6 @@ esp_err_t read_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uin
 esp_err_t write_byte(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t data);
 
 esp_err_t write_n_bytes(const MPU9250_spi_device_t* dev, MPU9250_register_t reg, uint8_t* buff, size_t n);
+
 
 #endif
