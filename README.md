@@ -12,6 +12,7 @@
   - I2C master
   - other?
 - [ ] Magentometer
+- [ ] Create reset procedure when I2C hangs (after esp reset or code upload)
 - [ ] Check that DLPFs are working properly
   - Record movement -> FFT -> see that cutoff frequency is at given point
 - [ ] Test FIFO with I2C slaves
